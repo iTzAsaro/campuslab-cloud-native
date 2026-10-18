@@ -126,15 +126,19 @@ flowchart TD
 
 ---
 
-## 4. Checklist Rápido de Verificación Antes de Salir a Disertar
-
-- [ ] Docker Compose levantado: `docker compose up -d` en la máquina/servidor.
-- [ ] Verificar que RabbitMQ 15672 esté accesible y con login `admin/admin`.
-- [ ] Verificar que PostgreSQL esté arriba y las tablas `bookings` y `audit_logs` existan.
-- [ ] Backend compilado y corriendo (`./gradlew test` pasa al 100%).
-- [ ] Frontend corriendo (`npm run build` pasa con 0 errores).
-- [ ] Pestañas del navegador abiertas listas para la demo:
-  1. Frontend CampusLab (`http://localhost:4200` o URL Cloud).
-  2. Consola RabbitMQ Management (`http://localhost:15672/#/queues`).
-  3. Consola del IDaaS (Azure Portal / Auth0) mostrando usuarios registrados.
-  4. Consola del API Manager (AWS API Gateway / Azure APIM) mostrando rutas y autorizador JWT.
+- [x] Docker Compose levantado con `restart: unless-stopped`: `rabbitmq1`, `rabbitmq2`, `campuslab_frontend`.
+- [x] RabbitMQ Management UI disponible en `http://52.200.87.76:15672` (Usuario: `admin` / Contraseña: `admin`).
+- [x] PostgreSQL Cloud activo en puerto 5432 con base de datos `campuslab` (tablas `bookings` y `audit_logs`).
+- [x] Backend Spring Boot 3.3.4 (Java 21) activo en EC2 (`http://52.200.87.76:8080/api/health` -> `{"status":"UP"}`).
+- [x] AWS API Gateway activo con JWT Authorizer (`https://hygoaj1glh.execute-api.us-east-1.amazonaws.com`).
+- [x] Caddy con SSL automático Let's Encrypt para `https://52-200-87-76.sslip.io`.
+- [x] Microsoft Entra ID (IDaaS) con usuario evaluador:
+  - **Tenant:** `CampusLabFinal.onmicrosoft.com` (`4b9ee4c5-a799-40af-88fe-81d4ef8aaba3`)
+  - **App Registration:** `CampusLab-Real-App` (`618a6485-6e73-4faf-803c-8e120dd362f4`)
+  - **Usuario Evaluador:** `estudiante@CampusLabFinal.onmicrosoft.com`
+  - **Contraseña:** `CampusLab2026!`
+- [x] Pestañas del navegador listas para la demo en vivo:
+  1. Frontend CampusLab Cloud: `https://52-200-87-76.sslip.io`
+  2. RabbitMQ Management Console: `http://52.200.87.76:15672/#/queues` (`admin`/`admin`)
+  3. Consola Microsoft Entra ID (IDaaS): `https://portal.azure.com` -> Tenant `CampusLabFinal` -> Usuarios y Aplicaciones.
+  4. Consola AWS API Gateway: `https://us-east-1.console.aws.amazon.com/apigateway/` -> API `hygoaj1glh`.
