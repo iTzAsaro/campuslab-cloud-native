@@ -32,7 +32,17 @@ export class AuthService {
   }
 
   login(): void {
-    this.oauthService.initCodeFlow();
+    if (!this.oauthService.discoveryDocumentLoaded) {
+      this.oauthService.loadDiscoveryDocument().then(() => {
+        this.oauthService.initCodeFlow();
+      }).catch(err => {
+        console.error('Error cargando documento OIDC:', err);
+        // Fallback directo a initCodeFlow
+        this.oauthService.initCodeFlow();
+      });
+    } else {
+      this.oauthService.initCodeFlow();
+    }
   }
 
   loginDemo(): void {

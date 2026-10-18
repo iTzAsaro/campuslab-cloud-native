@@ -1,12 +1,10 @@
 import { HttpInterceptorFn } from '@angular/common/http';
-import { inject } from '@angular/core';
-import { AuthService } from './auth.service';
 
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
-  const authService = inject(AuthService);
-  const token = authService.getToken();
+  // Evitar inyección circular (NG0200) leyendo el token directamente del storage
+  const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
 
-  if (token) {
+  if (token && !req.url.includes('microsoftonline.com') && !req.url.includes('.well-known')) {
     req = req.clone({
       setHeaders: {
         Authorization: `Bearer ${token}`
