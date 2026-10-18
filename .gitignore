@@ -1,0 +1,14 @@
+# Build and dependencies
+codigo/frontend/node_modules/
+codigo/frontend/dist/
+codigo/frontend/.angular/
+codigo/backend/.gradle/
+codigo/backend/build/
+*.zip
+
+# System & IDEs
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db

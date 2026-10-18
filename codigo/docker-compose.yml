@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  rabbitmq1:
+    image: rabbitmq:3-management
+    hostname: rabbitmq1
+    container_name: rabbitmq1
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "supersecretcookie"
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "admin"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - cluster_net
+
+  rabbitmq2:
+    image: rabbitmq:3-management
+    hostname: rabbitmq2
+    container_name: rabbitmq2
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "supersecretcookie"
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    depends_on:
+      - rabbitmq1
+    command: >
+      bash -c "rabbitmq-server -detached && 
+               sleep 10 && 
+               rabbitmqctl stop_app && 
+               rabbitmqctl join_cluster rabbit@rabbitmq1 && 
+               rabbitmqctl start_app && 
+               tail -f /dev/null"
+    networks:
+      - cluster_net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: "admin"
+      POSTGRES_PASSWORD: "adminpassword"
+      POSTGRES_DB: "appdb"
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - cluster_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: campuslab_backend
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/appdb"
+      SPRING_DATASOURCE_USERNAME: "admin"
+      SPRING_DATASOURCE_PASSWORD: "adminpassword"
+      SPRING_RABBITMQ_HOST: "rabbitmq1"
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: "admin"
+      SPRING_RABBITMQ_PASSWORD: "admin"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - rabbitmq1
+    networks:
+      - cluster_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: campuslab_frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    networks:
+      - cluster_net
+
+networks:
+  cluster_net:
+    driver: bridge
+
+volumes:
+  pgdata:

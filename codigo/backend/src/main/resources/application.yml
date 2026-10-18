@@ -1,0 +1,51 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: campuslab-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:campuslab}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:campuslab}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:campuslab123}}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:${RABBITMQ_HOST:localhost}}
+    port: ${SPRING_RABBITMQ_PORT:${RABBITMQ_PORT:5672}}
+    username: ${SPRING_RABBITMQ_USERNAME:${RABBITMQ_USER:admin}}
+    password: ${SPRING_RABBITMQ_PASSWORD:${RABBITMQ_PASS:admin}}
+    listener:
+      simple:
+        acknowledge-mode: manual
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://login.microsoftonline.com/72fd0b5a-8a6a-4cff-89f6-bde961f7e250/v2.0}
+
+campuslab:
+  rabbitmq:
+    exchanges:
+      direct: "campuslab.direct"
+      topic: "campuslab.topic"
+    queues:
+      notifications: "campuslab.booking.notifications"
+      reports: "campuslab.reports.generation"
+      audit: "campuslab.audit.events"
+      dlq:
+        notifications: "campuslab.booking.notifications.dlq"
+        reports: "campuslab.reports.generation.dlq"
+        audit: "campuslab.audit.events.dlq"
+    routing-keys:
+      notifications: "routing.notifications"
+      reports: "routing.reports.#"
+      audit: "routing.audit.#"

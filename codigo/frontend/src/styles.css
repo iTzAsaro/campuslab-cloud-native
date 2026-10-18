@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=JetBrains+Mono:wght@100;400;700&display=swap');
+
+html, body {
+  background-color: #000000;
+  color: #cdc4ba;
+  margin: 0;
+  padding: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+}
