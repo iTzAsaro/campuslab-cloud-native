@@ -9,6 +9,7 @@ const authConfig: AuthConfig = {
   responseType: 'code',
   scope: 'openid profile email',
   showDebugInformation: !environment.production,
+  strictDiscoveryDocumentValidation: false, // Requerido para Microsoft Entra ID
 };
 
 @Injectable({
@@ -25,11 +26,17 @@ export class AuthService {
     this.oauthService.configure(authConfig);
     this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
       this.isAuthenticated.set(this.oauthService.hasValidAccessToken());
+    }).catch(err => {
+      console.warn('OIDC Discovery info:', err);
     });
   }
 
   login(): void {
     this.oauthService.initCodeFlow();
+  }
+
+  loginDemo(): void {
+    this.isAuthenticated.set(true);
   }
 
   logout(): void {

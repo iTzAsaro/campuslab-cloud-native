@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 
 @Component({
@@ -12,7 +13,10 @@ import { AuthService } from '../../core/auth/auth.service';
         
         <div class="actions">
           <button class="btn-primary" (click)="onLogin()">
-            >_ INICIAR SESIÓN CON IDAAS
+            >_ INICIAR SESIÓN CON IDAAS (AZURE ENTRA ID)
+          </button>
+          <button class="btn-secondary mt-3" (click)="onLoginDemo()">
+            [ MODO DEMOSTRACIÓN EN VIVO (ACCESO DIRECTO) ]
           </button>
         </div>
       </div>
@@ -43,27 +47,52 @@ import { AuthService } from '../../core/auth/auth.service';
       font-family: 'JetBrains Mono', monospace;
       color: #8c857e;
       font-size: 0.85rem;
-      margin-bottom: 40px;
+      margin-bottom: 30px;
     }
     .btn-primary {
       background: transparent;
-      color: #cdc4ba;
-      border: 1px solid #cdc4ba;
+      color: #50fa7b;
+      border: 1px solid #50fa7b;
       padding: 12px 24px;
-      font-size: 0.9rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      cursor: pointer;
       transition: all 0.2s ease;
       width: 100%;
     }
     .btn-primary:hover {
-      background: #cdc4ba;
-      color: #000000;
+      background: rgba(80, 250, 123, 0.1);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: #8c857e;
+      border: 1px dashed #33302d;
+      padding: 10px 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    .btn-secondary:hover {
+      color: #fff;
+      border-color: #8c857e;
+    }
+    .mt-3 {
+      margin-top: 14px;
     }
   `]
 })
 export class LoginComponent {
   private authService = inject(AuthService);
+  private router = inject(Router);
 
   onLogin(): void {
     this.authService.login();
+  }
+
+  onLoginDemo(): void {
+    this.authService.loginDemo();
+    this.router.navigate(['/dashboard']);
   }
 }
