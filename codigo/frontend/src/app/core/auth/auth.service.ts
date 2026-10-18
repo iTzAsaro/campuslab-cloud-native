@@ -17,18 +17,31 @@ const authConfig: AuthConfig = {
 })
 export class AuthService {
   readonly isAuthenticated = signal<boolean>(false);
+  private initialLoadingPromise: Promise<boolean>;
 
   constructor(private oauthService: OAuthService) {
-    this.configureAuth();
+    this.initialLoadingPromise = this.configureAuth();
   }
 
-  private configureAuth() {
+  private async configureAuth(): Promise<boolean> {
     this.oauthService.configure(authConfig);
-    this.oauthService.loadDiscoveryDocumentAndTryLogin().then(() => {
-      this.isAuthenticated.set(this.oauthService.hasValidAccessToken());
-    }).catch(err => {
-      console.warn('OIDC Discovery info:', err);
-    });
+    try {
+      await this.oauthService.loadDiscoveryDocumentAndTryLogin();
+      const valid = this.hasValidToken();
+      this.isAuthenticated.set(valid);
+      return valid;
+    } catch (err) {
+      console.warn('OIDC Discovery / Login info:', err);
+      return false;
+    }
+  }
+
+  async ensureLoaded(): Promise<boolean> {
+    return this.initialLoadingPromise;
+  }
+
+  hasValidToken(): boolean {
+    return this.oauthService.hasValidAccessToken() || this.oauthService.hasValidIdToken();
   }
 
   login(): void {
@@ -55,6 +68,6 @@ export class AuthService {
   }
 
   getToken(): string | null {
-    return this.oauthService.getAccessToken();
+    return this.oauthService.getIdToken() || this.oauthService.getAccessToken();
   }
 }
