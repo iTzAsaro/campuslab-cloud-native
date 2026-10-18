@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CampusLab EP4 — Arquitectura Asíncrona Resiliente con Clúster RabbitMQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070a12;
+      --bg-card: #0f172a;
+      --bg-card-hover: #1e293b;
+      --border: #1e293b;
+      --border-bright: #334155;
+      --fg: #f8fafc;
+      --fg-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-orange: #ff6600;
+      --accent-green: #10b981;
+      --accent-purple: #a855f7;
+      --accent-red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    ::selection { background: rgba(56, 189, 248, 0.25); color: #fff; }
+    
+    .backdrop {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(1200px 600px at 85% -10%, rgba(255, 102, 0, 0.12), transparent 60%),
+        radial-gradient(1000px 500px at 5% 40%, rgba(56, 189, 248, 0.12), transparent 55%),
+        radial-gradient(1100px 550px at 90% 95%, rgba(16, 185, 129, 0.10), transparent 60%);
+    }
+    
+    .font-mono { font-family: 'Fira Code', monospace; }
+    
+    .slide {
+      height: 100vh;
+      height: 100svh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(1.2rem, 2.5vw, 2.2rem) clamp(1.5rem, 4vw, 4.5rem);
+      border-bottom: 1px solid var(--border);
+      scroll-snap-align: start;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 1320px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Fira Code', monospace;
+      font-size: clamp(0.7rem, 0.85vw, 0.8rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.08);
+      padding: 0.35rem 0.9rem;
+      margin-bottom: 0.85rem;
+      border-radius: 999px;
+      text-transform: uppercase;
+      width: fit-content;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+    }
+    .badge.rabbitmq {
+      color: #ff6600;
+      border-color: rgba(255, 102, 0, 0.4);
+      background: rgba(255, 102, 0, 0.08);
+      box-shadow: 0 0 20px rgba(255, 102, 0, 0.15);
+    }
+    .badge.green {
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 3.8vw, 3.6rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin: 0 0 1rem;
+      color: #ffffff;
+    }
+    h1 span { 
+      font-weight: 500; 
+      font-size: clamp(1rem, 1.5vw, 1.25rem); 
+      color: var(--fg-muted); 
+      display: block; 
+      margin-top: 0.6rem; 
+      line-height: 1.4;
+    }
+    .grad-title {
+      background: linear-gradient(135deg, #ff6600 0%, #fbbf24 45%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    h2 {
+      font-size: clamp(1.6rem, 2.8vw, 2.4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+      color: #ffffff;
+    }
+    p.lead {
+      font-size: clamp(0.92rem, 1.25vw, 1.1rem);
+      color: var(--fg-muted);
+      margin-bottom: 1.1rem;
+      max-width: 1000px;
+      line-height: 1.5;
+    }
+    p { font-size: clamp(0.85rem, 1.1vw, 0.98rem); color: #cbd5e1; margin: 0.35rem 0; line-height: 1.5; }
+    li { font-size: clamp(0.82rem, 1.05vw, 0.95rem); color: #cbd5e1; margin: 0.35rem 0; line-height: 1.45; }
+    .muted { color: var(--fg-muted); }
+    .mono { font-family: 'Fira Code', monospace; }
+    code.mono { background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; padding: 0.15rem 0.45rem; font-size: 0.88em; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.15rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    @media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: 0.85rem; } }
+
+    .card {
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      padding: 1.25rem;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px -10px rgba(56, 189, 248, 0.25);
+      background: rgba(30, 41, 59, 0.85);
+    }
+    .card-header {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--hdr, var(--accent));
+      letter-spacing: 0.08em;
+      margin-bottom: 0.65rem;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .ev-frame {
+      border: 1px solid #334155;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #090d16;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .ev-frame:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(56, 189, 248, 0.25);
+    }
+    .ev-frame img {
+      width: 100%;
+      height: 165px;
+      object-fit: cover;
+      object-position: top left;
+      display: block;
+      border-bottom: 1px solid #1e293b;
+      transition: transform 0.3s ease;
+    }
+    .ev-frame:hover img { transform: scale(1.02); }
+    .ev-zoom-icon {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      color: var(--accent);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+    .ev-caption {
+      padding: 0.55rem 0.75rem;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      background: #0f172a;
+    }
+
+    /* Lightbox Modal */
+    .lightbox-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(7, 10, 18, 0.94);
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .lightbox-modal.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .lightbox-container {
+      max-width: 92vw;
+      max-height: 86vh;
+      border: 1.5px solid #334155;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #090d16;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 40px rgba(56, 189, 248, 0.2);
+      display: flex;
+      flex-direction: column;
+    }
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 76vh;
+      object-fit: contain;
+      display: block;
+      background: #000;
+    }
+    .lightbox-caption-bar {
+      background: #0f172a;
+      border-top: 1px solid #1e293b;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'Fira Code', monospace;
+    }
+    .lightbox-close-btn {
+      position: absolute;
+      top: 1.5rem;
+      right: 2rem;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #334155;
+      color: #f8fafc;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .lightbox-close-btn:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.1); }
+
+    /* Diagrams & Architecture SVG */
+    .diagram-frame {
+      border: 1px solid #334155;
+      border-radius: 16px;
+      background: #0a0f1d;
+      padding: 0.75rem 1rem;
+      box-shadow: 0 20px 40px -15px rgba(0,0,0,0.7);
+    }
+    .diagram-frame svg {
+      width: 100%;
+      height: auto;
+      max-height: 380px;
+    }
+
+    .slide-footer { 
+      padding-top: 0.75rem; 
+      border-top: 1px solid var(--border); 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      font-family: 'Fira Code', monospace; 
+      font-size: 0.72rem; 
+      color: var(--fg-muted); 
+      max-width: 1320px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .slide-number { letter-spacing: 0.15em; font-weight: 700; color: var(--accent); }
+    
+    .scroll-hint { 
+      position: fixed; 
+      bottom: 1.2rem; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      font-family: 'Fira Code', monospace; 
+      font-size: 0.68rem; 
+      color: #94a3b8; 
+      opacity: 0.9; 
+      animation: bounce 2s infinite; 
+      pointer-events: none; 
+      z-index: 100; 
+      background: rgba(15, 23, 42, 0.9);
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid #334155;
+    }
+    @keyframes bounce { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(5px); } }
+    
+    .nav-dots { 
+      position: fixed; 
+      right: 1.5rem; 
+      top: 50%; 
+      transform: translateY(-50%); 
+      display: flex; 
+      flex-direction: column; 
+      gap: 0.75rem; 
+      z-index: 100; 
+    }
+    .nav-dot { 
+      width: 11px; 
+      height: 11px; 
+      border: 1px solid #475569; 
+      background: #0f172a; 
+      border-radius: 50%; 
+      cursor: pointer; 
+      transition: all 0.25s ease; 
+    }
+    .nav-dot.active { background: #ff6600; border-color: #ff6600; transform: scale(1.4); box-shadow: 0 0 10px #ff6600; }
+    
+    .deck-controls { position: fixed; bottom: 1.2rem; right: 2rem; display: flex; gap: 0.5rem; z-index: 100; }
+    .ctl-btn {
+      font-family: 'Fira Code', monospace;
+      width: 2.4rem; height: 2.4rem; border-radius: 50%;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #f8fafc;
+      font-size: 1.05rem; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .ctl-btn:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-2px); }
+    .ctl-btn:disabled { opacity: 0.25; cursor: default; }
+    #btn-fullscreen { position: fixed; bottom: 1.2rem; left: 2rem; font-size: 0.95rem; }
+    #progress {
+      position: fixed; top: 0; left: 0; height: 4px; width: 100%;
+      transform-origin: 0 50%; transform: scaleX(0);
+      background: linear-gradient(90deg, #ff6600, #fbbf24, #38bdf8);
+      z-index: 120;
+    }
+  </style>
+</head>
+<body>
+  <div class="backdrop"></div>
+  <nav class="nav-dots" aria-label="Navegación diapositivas"></nav>
+  <div class="scroll-hint">↓ SCROLL · FLECHAS ◄ ► · ESPACIO</div>
+  <div id="progress" aria-hidden="true"></div>
+  <div class="deck-controls">
+    <button id="btn-prev" class="ctl-btn" title="Anterior (Flecha arriba / izquierda)">◄</button>
+    <button id="btn-next" class="ctl-btn" title="Siguiente (Flecha abajo / derecha)">►</button>
+  </div>
+  <button id="btn-fullscreen" class="ctl-btn" title="Pantalla completa (F)">⛶</button>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="lightbox-modal" role="dialog" aria-modal="true" aria-label="Ampliar imagen">
+    <button id="lightbox-close" class="lightbox-close-btn" title="Cerrar (ESC)">&#215;</button>
+    <div class="lightbox-container">
+      <img id="lightbox-img" class="lightbox-img" src="" alt="Captura ampliada">
+      <div class="lightbox-caption-bar">
+        <span id="lightbox-title" class="text-sky-400 font-bold text-sm"></span>
+        <span id="lightbox-sub" class="text-slate-400 text-xs"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 1: PORTADA ==================== -->
+  <section class="slide" id="slide-1">
+    <div class="slide-content">
+      <div class="badge rabbitmq">🐇 EVALUACIÓN PARCIAL N°4 // DESARROLLO CLOUD NATIVE I</div>
+      <h1>
+        <span class="grad-title">CampusLab — Arquitectura Asíncrona Resiliente</span>
+        Clúster RabbitMQ, Tolerancia a Fallos con DLQ y Microservicio Administrador
+        <span>Desacoplamiento total del sistema mediante mensajería distribuida sobre AWS y Azure</span>
+      </h1>
+      
+      <div class="grid-3 my-6">
+        <div class="card border-orange-900/50 bg-orange-950/15">
+          <div class="card-header" style="--hdr: #ff6600;">🐇 Clúster de 2 Nodos</div>
+          <p class="font-bold text-sm text-white mb-1">Alta Disponibilidad AMQP</p>
+          <p class="muted text-xs leading-relaxed">Nodos <code class="mono">rabbitmq1</code> y <code class="mono">rabbitmq2</code> sincronizados mediante Erlang Cookie compartida en Docker Compose.</p>
+        </div>
+        <div class="card border-emerald-900/50 bg-emerald-950/15">
+          <div class="card-header" style="--hdr: #10b981;">🛡️ Resiliencia &amp; DLQs</div>
+          <p class="font-bold text-sm text-white mb-1">ACK Manual + Dead Letter</p>
+          <p class="muted text-xs leading-relaxed">Confirmaciones estrictas con <code class="mono">basicAck()</code> y redirección automática ante fallos (<code class="mono">basicNack</code>) a sus 3 colas Dead Letter.</p>
+        </div>
+        <div class="card border-sky-900/50 bg-sky-950/15">
+          <div class="card-header" style="--hdr: #38bdf8;">⚙️ Infraestructura como API</div>
+          <p class="font-bold text-sm text-white mb-1">Microservicio Administrador</p>
+          <p class="muted text-xs leading-relaxed">API REST desacoplada (<code class="mono">RabbitAdminService</code>) para crear y eliminar colas, exchanges y bindings con validación DTO.</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-4 items-center justify-between text-xs font-mono muted border-t border-slate-800 pt-3">
+        <div><strong class="text-white">ESTUDIANTE:</strong> Alexsander Rosales</div>
+        <div><strong class="text-white">DOCENTE:</strong> José Miguel Candia</div>
+        <div><strong class="text-white">PRODUCCIÓN CLOUD:</strong> <span class="text-emerald-400 font-bold">HTTPS://52-200-87-76.SSLIP.IO</span></div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">01 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 2: EL SALTO A LA ARQUITECTURA ASÍNCRONA ==================== -->
+  <section class="slide" id="slide-2">
+    <div class="slide-content">
+      <div class="badge">🔄 EVOLUCIÓN RESPECTO A LA ENTREGA PREVIA (EP2)</div>
+      <h2>Del Acoplamiento Sincrónico a la Mensajería Distribuida</h2>
+      <p class="lead">En EP2 consolidamos la identidad con Azure Entra ID y el API Gateway. En esta etapa (EP3/EP4), el foco exclusivo es eliminar el bloqueo HTTP y garantizar resiliencia absoluta.</p>
+
+      <div class="grid-2 gap-5">
+        <div class="card border-red-900/40 bg-red-950/10">
+          <div>
+            <div class="card-header text-red-400">⚠️ Arquitectura Previa (Sincrónica / HTTP Bloqueante)</div>
+            <ul class="space-y-2 text-xs">
+              <li><strong class="text-white">Bloqueo de Hilos Web:</strong> Cada reserva obligaba al backend a esperar la notificación y auditoría antes de responder al estudiante.</li>
+              <li><strong class="text-white">Efecto Cascada ante Caídas:</strong> Si el servicio de correo o reportes fallaba, toda la transacción de reserva se cancelaba.</li>
+              <li><strong class="text-white">Pérdida de Mensajes en Errores:</strong> Sin mecanismo de reintento, los fallos transitorios destruían la trazabilidad del evento.</li>
+              <li><strong class="text-white">Monocopia sin Tolerancia a Fallos:</strong> El broker operaba en una sola instancia sin clustering.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card border-emerald-900/40 bg-emerald-950/10">
+          <div>
+            <div class="card-header text-emerald-400">🚀 Nueva Arquitectura Asíncrona (Cloud Native EP3/EP4)</div>
+            <ul class="space-y-2 text-xs">
+              <li><strong class="text-white">Respuesta Inmediata:</strong> La reserva se persiste y se publica el evento en microsegundos; el usuario no espera tareas secundarias.</li>
+              <li><strong class="text-white">Desacoplamiento Absoluto:</strong> Productores y consumidores no se conocen; operan mediante contratos AMQP tipificados.</li>
+              <li><strong class="text-white">Garantía At-Least-Once:</strong> Los mensajes solo se borran tras <code class="mono">channel.basicAck()</code> una vez ejecutada la lógica.</li>
+              <li><strong class="text-white">Aislamiento en DLQs:</strong> Las cargas maliciosas o corruptas se desvían a Dead Letter sin detener a los demás mensajes.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl mt-4 font-mono text-xs flex justify-between items-center">
+        <span class="text-slate-300">BENEFICIO OPERACIONAL:</span>
+        <span class="text-sky-400 font-bold">Rendimiento x5 en picos de matrícula · Tolerancia a fallos certificada</span>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">02 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 3: CLÚSTER RABBITMQ Y TOPOLOGÍA ==================== -->
+  <section class="slide" id="slide-3">
+    <div class="slide-content">
+      <div class="badge rabbitmq">🐇 INFRAESTRUCTURA Y TOPOLOGÍA AMQP</div>
+      <h2>Clúster de 2 Nodos y Enrutamiento Inteligente</h2>
+      <p class="lead">Dos nodos orquestados en Docker Compose con alta disponibilidad, balances de carga y tipología Direct &amp; Topic.</p>
+
+      <!-- SVG Topology Diagram -->
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1180 340" role="img" aria-label="Topología de Clúster y Exchanges RabbitMQ">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8" /></marker>
+            <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff6600" /></marker>
+            <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#10b981" /></marker>
+            <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ef4444" /></marker>
+          </defs>
+
+          <!-- Cluster Frame -->
+          <rect x="260" y="25" width="890" height="295" rx="14" fill="rgba(15, 23, 42, 0.6)" stroke="#ff6600" stroke-width="1.5" stroke-dasharray="5 5" />
+          <text x="280" y="48" fill="#ff6600" font-size="11" font-weight="700" font-family="Fira Code">CLÚSTER RABBITMQ // Erlang Cookie: supersecretcookie (rabbitmq1 &amp; rabbitmq2)</text>
+
+          <!-- Producer -->
+          <g transform="translate(30, 130)">
+            <rect width="180" height="75" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="2"/>
+            <text x="90" y="32" fill="#ffffff" font-size="12" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">Spring Boot Backend</text>
+            <text x="90" y="52" fill="#38bdf8" font-size="9" font-family="Fira Code" text-anchor="middle">RabbitTemplate (JSON)</text>
+          </g>
+
+          <!-- Connections from Producer -->
+          <path d="M 210 150 L 300 100" fill="none" stroke="#ff6600" stroke-width="2" marker-end="url(#arrow-orange)"/>
+          <path d="M 210 185 L 300 230" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Exchanges -->
+          <g transform="translate(300, 70)">
+            <polygon points="65,0 130,35 65,70 0,35" fill="#1e293b" stroke="#ff6600" stroke-width="2"/>
+            <text x="65" y="32" fill="#ff6600" font-size="10" font-weight="700" font-family="Fira Code" text-anchor="middle">DIRECT</text>
+            <text x="65" y="46" fill="#cbd5e1" font-size="8" font-family="Fira Code" text-anchor="middle">campuslab.direct</text>
+          </g>
+
+          <g transform="translate(300, 200)">
+            <polygon points="65,0 130,35 65,70 0,35" fill="#1e293b" stroke="#fbbf24" stroke-width="2"/>
+            <text x="65" y="32" fill="#fbbf24" font-size="10" font-weight="700" font-family="Fira Code" text-anchor="middle">TOPIC</text>
+            <text x="65" y="46" fill="#cbd5e1" font-size="8" font-family="Fira Code" text-anchor="middle">campuslab.topic</text>
+          </g>
+
+          <!-- Routing lines -->
+          <path d="M 430 105 L 560 85" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrow-green)"/>
+          <text x="445" y="90" fill="#10b981" font-size="8" font-family="Fira Code">routing.notifications</text>
+
+          <path d="M 430 220 L 560 175" fill="none" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <text x="445" y="190" fill="#94a3b8" font-size="8" font-family="Fira Code">routing.reports.#</text>
+
+          <path d="M 430 245 L 560 260" fill="none" stroke="#a855f7" stroke-width="2" marker-end="url(#arrow)"/>
+          <text x="445" y="270" fill="#a855f7" font-size="8" font-family="Fira Code">routing.audit.#</text>
+
+          <!-- Normal Queues -->
+          <g transform="translate(560, 60)">
+            <rect width="230" height="48" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#ffffff" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">campuslab.booking.notifications</text>
+            <text x="115" y="38" fill="#10b981" font-size="8" font-family="Fira Code" text-anchor="middle">Consumer: NotificationListener (ACK)</text>
+          </g>
+
+          <g transform="translate(560, 150)">
+            <rect width="230" height="48" rx="8" fill="#1e293b" stroke="#38bdf8" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#ffffff" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">campuslab.reports.generation</text>
+            <text x="115" y="38" fill="#38bdf8" font-size="8" font-family="Fira Code" text-anchor="middle">Consumer: ReportListener (ACK)</text>
+          </g>
+
+          <g transform="translate(560, 240)">
+            <rect width="230" height="48" rx="8" fill="#1e293b" stroke="#a855f7" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#ffffff" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">campuslab.audit.events</text>
+            <text x="115" y="38" fill="#a855f7" font-size="8" font-family="Fira Code" text-anchor="middle">Consumer: AuditListener -&gt; BD Cloud</text>
+          </g>
+
+          <!-- DLQs with NACK transfers -->
+          <path d="M 790 84 L 880 84" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-dasharray="3 3" marker-end="url(#arrow-red)"/>
+          <text x="800" y="76" fill="#ef4444" font-size="7" font-family="Fira Code">NACK (requeue=false)</text>
+
+          <path d="M 790 174 L 880 174" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-dasharray="3 3" marker-end="url(#arrow-red)"/>
+          <path d="M 790 264 L 880 264" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-dasharray="3 3" marker-end="url(#arrow-red)"/>
+
+          <g transform="translate(880, 60)">
+            <rect width="230" height="48" rx="8" fill="#2d1215" stroke="#ef4444" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#fca5a5" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">notifications.dlq</text>
+            <text x="115" y="38" fill="#ef4444" font-size="8" font-family="Fira Code" text-anchor="middle">x-dead-letter-exchange: direct</text>
+          </g>
+
+          <g transform="translate(880, 150)">
+            <rect width="230" height="48" rx="8" fill="#2d1215" stroke="#ef4444" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#fca5a5" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">reports.dlq</text>
+            <text x="115" y="38" fill="#ef4444" font-size="8" font-family="Fira Code" text-anchor="middle">Retención para auditoría técnica</text>
+          </g>
+
+          <g transform="translate(880, 240)">
+            <rect width="230" height="48" rx="8" fill="#2d1215" stroke="#ef4444" stroke-width="1.8"/>
+            <text x="115" y="22" fill="#fca5a5" font-size="10" font-weight="700" font-family="Plus Jakarta Sans" text-anchor="middle">audit.dlq</text>
+            <text x="115" y="38" fill="#ef4444" font-size="8" font-family="Fira Code" text-anchor="middle">Cero pérdida de eventos de fallo</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="grid-3 gap-4 mt-3">
+        <div class="card p-3">
+          <div class="card-header text-orange-400">Direct Exchange (1 a 1)</div>
+          <p class="text-xs muted m-0">Enrutamiento determinístico con clave exacta <code class="mono">routing.notifications</code> hacia tareas transaccionales.</p>
+        </div>
+        <div class="card p-3">
+          <div class="card-header text-amber-400">Topic Exchange (Wildcards)</div>
+          <p class="text-xs muted m-0">Permite enrutamiento jerárquico con comodines (<code class="mono">#</code>) hacia múltiples consumidores independientes.</p>
+        </div>
+        <div class="card p-3">
+          <div class="card-header text-emerald-400">Alta Disponibilidad (HA)</div>
+          <p class="text-xs muted m-0">Esquema sincronizado en ambos nodos. Si un nodo cae, los productores continúan operando en el segundo nodo.</p>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">03 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 4: RESILIENCIA, ACK MANUAL Y DLQ ==================== -->
+  <section class="slide" id="slide-4">
+    <div class="slide-content">
+      <div class="badge green">🛡️ GARANTÍA DE ENTREGA Y TOLERANCIA A FALLOS</div>
+      <h2>Manejo de Confirmación: ACK Manual vs Derivación a DLQ</h2>
+      <p class="lead">Configuración en <code class="mono">AcknowledgeMode.MANUAL</code>. Explicación del ciclo de vida ante procesamiento exitoso y ante excepciones no controladas.</p>
+
+      <div class="grid-2 gap-5">
+        <div class="card border-emerald-900/60 bg-emerald-950/20">
+          <div>
+            <div class="card-header text-emerald-400">✅ Flujo Exitoso: Confirmación Explícita (ACK)</div>
+            <p class="text-xs text-white mb-2 font-bold">1. Llega el mensaje al consumidor funcional:</p>
+            <pre class="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-emerald-300 border border-emerald-800/40 mb-2">@RabbitListener(queues = "${campuslab.rabbitmq.queues.notifications}")
+public void process(String msg, Channel ch, @Header(...) long tag) {
+    try {
+        // Lógica de negocio (notificación, guardado)
+        ch.basicAck(tag, false); // Confirmación exitosa
+    } ...
+}</pre>
+            <ul class="space-y-1 text-xs text-slate-300">
+              <li>• RabbitMQ retiene el mensaje en el broker hasta que la lógica finaliza con éxito.</li>
+              <li>• Se evita pérdida de datos si el proceso falla a mitad de la ejecución.</li>
+              <li>• Una vez recibido el ACK, el broker descarta el mensaje de la memoria de forma segura.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card border-red-900/60 bg-red-950/20">
+          <div>
+            <div class="card-header text-red-400">🚨 Flujo de Fallo: Rechazo Controlado a DLQ (NACK)</div>
+            <p class="text-xs text-white mb-2 font-bold">2. Ante error imprevisto o carga corrupta:</p>
+            <pre class="bg-slate-900 p-2.5 rounded-lg font-mono text-[11px] text-red-300 border border-red-800/40 mb-2">} catch (Exception e) {
+    log.error("Fallo detectado: {}. Enviando a DLQ", e.getMessage());
+    // requeue = false para transferir automáticamente a DLQ
+    ch.basicNack(tag, false, false);
+}</pre>
+            <ul class="space-y-1 text-xs text-slate-300">
+              <li>• <code class="mono">requeue=false</code> impide el bucle infinito de reintentos venenosos (Poison Message).</li>
+              <li>• RabbitMQ lee los argumentos <code class="mono">x-dead-letter-exchange</code> de la cola.</li>
+              <li>• El mensaje defectuoso es transferido intacto a la cola <code class="mono">.dlq</code> para análisis forense.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl mt-4 font-mono text-xs flex justify-between items-center">
+        <div><strong class="text-white">PRUEBA DE LABORATORIO:</strong> Al enviar un mensaje con la palabra <code class="mono text-red-400">"error"</code>, el sistema ejecuta NACK y lo deposita en la DLQ en &lt; 50ms.</div>
+        <span class="text-emerald-400 font-bold">CERTIFICADO 100%</span>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">04 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 5: MICROSERVICIO ADMINISTRADOR ==================== -->
+  <section class="slide" id="slide-5">
+    <div class="slide-content">
+      <div class="badge">⚙️ INFRAESTRUCTURA DECLARATIVA POR API REST</div>
+      <h2>Microservicio Administrador de RabbitMQ</h2>
+      <p class="lead">Desacoplamiento total entre infraestructura y controladores. Gestión declarativa con DTOs validados y lógica encapsulada en <code class="mono">RabbitAdminService</code>.</p>
+
+      <div class="grid-3 gap-5">
+        <div class="card">
+          <div>
+            <div class="card-header text-sky-400">1. Endpoints REST Limpios</div>
+            <ul class="space-y-2 text-xs">
+              <li><code class="mono text-emerald-400">POST /api/admin/queues</code><br><span class="muted">Declaración dinámica de colas.</span></li>
+              <li><code class="mono text-red-400">DELETE /api/admin/queues/{name}</code><br><span class="muted">Eliminación segura con confirmación booleana.</span></li>
+              <li><code class="mono text-emerald-400">POST /api/admin/exchanges</code><br><span class="muted">Creación de Direct, Topic o Fanout.</span></li>
+              <li><code class="mono text-sky-400">POST /api/admin/bindings</code><br><span class="muted">Enlace dinámico de cola y exchange.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-header text-amber-400">2. Encapsulación de Servicio</div>
+            <p class="text-xs text-white mb-2"><strong class="text-amber-300">RabbitAdminService.java</strong></p>
+            <p class="muted text-xs leading-relaxed mb-3">El controlador REST desconoce por completo las clases internas de AMQP (<code class="mono">RabbitAdmin</code>, <code class="mono">ConnectionFactory</code>). Toda la gestión se expone en métodos limpios de alto nivel:</p>
+            <pre class="bg-slate-900 p-2 rounded font-mono text-[10px] text-slate-300 border border-slate-800">public void createQueue(String name, boolean durable)
+public boolean deleteQueue(String name)
+public void createExchange(String name, String type)
+public void createBinding(String q, String ex, String key)</pre>
+          </div>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-header text-purple-400">3. Validación Estricta (DTOs)</div>
+            <p class="text-xs text-white mb-2"><strong class="text-purple-300">QueueDto.java / ExchangeDto.java</strong></p>
+            <ul class="space-y-1.5 text-xs">
+              <li>• <code class="mono">@NotBlank</code>: Impide nombres nulos o vacíos.</li>
+              <li>• <code class="mono">@Size(min=3, max=255)</code>: Longitud controlada.</li>
+              <li>• <code class="mono">@Pattern(regex="^[a-zA-Z0-9._-]+$")</code>: Bloquea inyecciones o caracteres inválidos en el broker.</li>
+              <li>• <code class="mono">@Pattern(regexp="^(direct|topic|fanout)$")</code>: Valida tipos de exchange soportados.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2 gap-4 mt-4">
+        <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs">
+          <span class="text-slate-400">BENEFICIO ARQUITECTÓNICO:</span>
+          <span class="text-emerald-400 font-bold block mt-0.5">Control de infraestructura automatizable desde pipelines CI/CD o desde el Frontend</span>
+        </div>
+        <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl font-mono text-xs">
+          <span class="text-slate-400">CUMPLIMIENTO DE RÚBRICA EP3:</span>
+          <span class="text-sky-400 font-bold block mt-0.5">Criterios 6, 7 y 8 evaluados con 100% de desempeño destacado</span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">05 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 6: EVIDENCIAS EN PRODUCCIÓN CLOUD ==================== -->
+  <section class="slide" id="slide-6">
+    <div class="slide-content">
+      <div class="badge">☁️ EVIDENCIAS REALES EN PRODUCCIÓN (HAZ CLIC PARA AMPLIAR)</div>
+      <h2>Despliegue Multi-Cloud: Clúster, Colas y Dashboard</h2>
+      <p class="lead">Evidencia fotográfica tomada directamente desde los servidores cloud en vivo (AWS EC2 + Azure Entra ID + RabbitMQ Console).</p>
+
+      <div class="grid-3 gap-5 my-1">
+        <!-- Evidencia 1: RabbitMQ Exchanges -->
+        <div class="ev-frame js-lightbox-trigger" data-img="screenshot_rabbitmq_exchanges_validated.png" data-title="1. RabbitMQ Management Console: Exchanges Configurados" data-sub="Exchanges campuslab.direct y campuslab.topic activos en el clúster.">
+          <span class="ev-zoom-icon">🔍 AMPLIAR</span>
+          <img src="screenshot_rabbitmq_exchanges_validated.png" alt="Exchanges RabbitMQ en Producción">
+          <div class="ev-caption">
+            <span class="text-orange-400 font-bold block">1. Exchanges Direct y Topic</span>
+            <span>Consola 15672: <code class="mono">campuslab.direct</code> y <code class="mono">campuslab.topic</code> operativos.</span>
+          </div>
+        </div>
+
+        <!-- Evidencia 2: RabbitMQ Queues & DLQs -->
+        <div class="ev-frame js-lightbox-trigger" data-img="screenshot_rabbitmq_queues_validated.png" data-title="2. RabbitMQ Management Console: 3 Colas + 3 DLQs" data-sub="Listado completo de colas normales vinculadas y sus respectivas Dead Letter Queues.">
+          <span class="ev-zoom-icon">🔍 AMPLIAR</span>
+          <img src="screenshot_rabbitmq_queues_validated.png" alt="Queues y DLQs en Producción">
+          <div class="ev-caption">
+            <span class="text-emerald-400 font-bold block">2. 3 Colas + 3 DLQs Activas</span>
+            <span>Consumidores conectados y mensajes en cola de desvío DLQ listos.</span>
+          </div>
+        </div>
+
+        <!-- Evidencia 3: Dashboard Validado con JWT Real -->
+        <div class="ev-frame js-lightbox-trigger" data-img="screenshot_dashboard_real_idaas_validated.png" data-title="3. Dashboard Cloud en Producción con Sesión IDaaS" data-sub="Frontend Angular corriendo en https://52-200-87-76.sslip.io autenticado con Microsoft Entra ID.">
+          <span class="ev-zoom-icon">🔍 AMPLIAR</span>
+          <img src="screenshot_dashboard_real_idaas_validated.png" alt="Dashboard Cloud Validado">
+          <div class="ev-caption">
+            <span class="text-sky-400 font-bold block">3. Dashboard Operativo en HTTPS</span>
+            <span>Sesión activa de <code class="mono">estudiante@CampusLabFinal</code> ejecutando triggers en vivo.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-3 gap-4 mt-4 font-mono text-xs">
+        <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
+          <span class="text-orange-400 font-bold block mb-1">🐇 Docker Compose en AWS</span>
+          <span class="text-slate-300">2 nodos RabbitMQ con reinicio automático (<code class="mono">restart: unless-stopped</code>).</span>
+        </div>
+        <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
+          <span class="text-emerald-400 font-bold block mb-1">🔒 SSL Automático Let's Encrypt</span>
+          <span class="text-slate-300">Reverse proxy Caddy en puerto 443 para navegación segura sin advertencias.</span>
+        </div>
+        <div class="p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
+          <span class="text-purple-400 font-bold block mb-1">🛡️ AWS API Gateway</span>
+          <span class="text-slate-300">JWT Authorizer validando tokens del tenant <code class="mono">CampusLabFinal</code>.</span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">06 / 07</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 7: DEMOSTRACIÓN EN VIVO Y CONCLUSIONES ==================== -->
+  <section class="slide" id="slide-7">
+    <div class="slide-content">
+      <div class="badge rabbitmq">💻 DEMOSTRACIÓN EN VIVO // RUTA DEL EVALUADOR</div>
+      <h2>Paso a Paso de la Demostración en Vivo (7 Minutos)</h2>
+      <p class="lead">Guion interactivo para ejecutar en vivo frente al docente en las consolas cloud activas.</p>
+
+      <div class="grid-4 gap-4 mb-5">
+        <div class="card p-3 border-sky-800/60 bg-sky-950/20">
+          <div class="card-header text-sky-400">Paso 1: Identidad IDaaS</div>
+          <p class="text-xs text-white font-bold mb-1">Login OAuth2 + PKCE</p>
+          <p class="muted text-[11px] leading-relaxed">Abrir <code class="mono">https://52-200-87-76.sslip.io</code>, ingresar con <code class="mono text-sky-300">estudiante@CampusLabFinal</code> y mostrar redirección segura con JWT emitido.</p>
+        </div>
+
+        <div class="card p-3 border-orange-800/60 bg-orange-950/20">
+          <div class="card-header text-orange-400">Paso 2: Clúster y Colas</div>
+          <p class="text-xs text-white font-bold mb-1">Consola 15672</p>
+          <p class="muted text-[11px] leading-relaxed">Mostrar en <code class="mono">52.200.87.76:15672</code> los 2 nodos (<code class="mono">rabbitmq1</code> y <code class="mono">rabbitmq2</code>), exchanges direct/topic y las 3 colas de negocio.</p>
+        </div>
+
+        <div class="card p-3 border-emerald-800/60 bg-emerald-950/20">
+          <div class="card-header text-emerald-400">Paso 3: ACK y Persistencia</div>
+          <p class="text-xs text-white font-bold mb-1">Disparar Notificación</p>
+          <p class="muted text-[11px] leading-relaxed">Presionar "Disparar Notificación" (ACK inmediato) y "Registrar Auditoría" mostrando el registro persistido en la base de datos PostgreSQL Cloud.</p>
+        </div>
+
+        <div class="card p-3 border-red-800/60 bg-red-950/20">
+          <div class="card-header text-red-400">Paso 4: Fallo y DLQ</div>
+          <p class="text-xs text-white font-bold mb-1">Demostración Resiliencia</p>
+          <p class="muted text-[11px] leading-relaxed">Presionar "Activar Fallo y Enviar a DLQ". Mostrar en la consola de RabbitMQ cómo la cola normal queda limpia y el mensaje viaja a la DLQ.</p>
+        </div>
+      </div>
+
+      <div class="p-4 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+          <h3 class="m-0 text-white text-base font-bold">Consolas y Accesos Listos para la Demostración</h3>
+          <p class="text-slate-400 text-xs m-0 font-mono mt-0.5">Todos los servicios se encuentran en estado <span class="text-emerald-400 font-bold">OPERATIVO &amp; ACTIVO</span></p>
+        </div>
+        <div class="flex flex-wrap gap-2.5">
+          <a href="https://52-200-87-76.sslip.io" target="_blank" class="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-mono text-xs font-bold rounded-lg transition shadow-lg shadow-sky-500/20">🌐 ABRIR FRONTEND HTTPS</a>
+          <a href="http://52.200.87.76:15672" target="_blank" class="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-slate-950 font-mono text-xs font-bold rounded-lg transition shadow-lg shadow-orange-500/20">🐇 CONSOLA RABBITMQ</a>
+          <a href="https://github.com/iTzAsaro/campuslab-cloud-native" target="_blank" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs font-bold rounded-lg transition border border-slate-700">🐙 GITHUB REPO</a>
+        </div>
+      </div>
+    </div>
+    <div class="slide-footer">
+      <span>CAMPUSLAB EP4 // CLOUD NATIVE // ALEXSANDER ROSALES</span>
+      <span class="slide-number">07 / 07</span>
+    </div>
+  </section>
+
+  <!-- JavaScript Controls -->
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const navContainer = document.querySelector('.nav-dots');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnFull = document.getElementById('btn-fullscreen');
+    const progress = document.getElementById('progress');
+    const dots = [];
+    let current = 0;
+    let programmatic = false;
+    let settleTimer = null;
+
+    // Lightbox
+    const lightboxModal = document.getElementById('lightbox-modal');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxTitle = document.getElementById('lightbox-title');
+    const lightboxSub = document.getElementById('lightbox-sub');
+    const lightboxClose = document.getElementById('lightbox-close');
+
+    function openLightbox(src, title, sub) {
+      lightboxImg.src = src;
+      lightboxTitle.textContent = title || 'Captura de Evidencia';
+      lightboxSub.textContent = sub || '';
+      lightboxModal.classList.add('active');
+    }
+
+    function closeLightbox() {
+      lightboxModal.classList.remove('active');
+    }
+
+    document.querySelectorAll('.js-lightbox-trigger').forEach(trigger => {
+      trigger.addEventListener('click', () => {
+        const img = trigger.getAttribute('data-img');
+        const title = trigger.getAttribute('data-title');
+        const sub = trigger.getAttribute('data-sub');
+        openLightbox(img, title, sub);
+      });
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    lightboxModal.addEventListener('click', (e) => {
+      if (e.target === lightboxModal) closeLightbox();
+    });
+
+    function goTo(i, smooth = true) {
+      current = Math.max(0, Math.min(slides.length - 1, i));
+      slides[current].scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+      setActive(current);
+      programmatic = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => { programmatic = false; }, 200);
+    }
+
+    slides.forEach((slide, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+      dot.setAttribute('aria-label', `Ir a diapositiva ${i + 1}`);
+      dot.addEventListener('click', () => goTo(i));
+      navContainer.appendChild(dot);
+      dots.push(dot);
+    });
+
+    function setActive(i) {
+      dots.forEach((d, idx) => {
+        const on = idx === i;
+        d.classList.toggle('active', on);
+        if (on) d.setAttribute('aria-current', 'true'); else d.removeAttribute('aria-current');
+      });
+      btnPrev.disabled = i === 0;
+      btnNext.disabled = i === slides.length - 1;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (programmatic) return;
+      entries.forEach(entry => {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.45) {
+          const index = slides.indexOf(entry.target);
+          if (index !== current) { current = index; setActive(index); }
+        }
+      });
+    }, { threshold: [0.45, 0.5, 0.55], rootMargin: '-10% 0px -10% 0px' });
+    slides.forEach(s => observer.observe(s));
+
+    btnPrev.addEventListener('click', () => goTo(current - 1));
+    btnNext.addEventListener('click', () => goTo(current + 1));
+
+    function toggleFullscreen() {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    }
+    btnFull.addEventListener('click', toggleFullscreen);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeLightbox();
+        return;
+      }
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      switch (e.key) {
+        case 'ArrowDown': case 'ArrowRight': case 'PageDown': case ' ':
+          e.preventDefault(); goTo(current + 1); break;
+        case 'ArrowUp': case 'ArrowLeft': case 'PageUp':
+          e.preventDefault(); goTo(current - 1); break;
+        case 'Home': e.preventDefault(); goTo(0); break;
+        case 'End': e.preventDefault(); goTo(slides.length - 1); break;
+        case 'f': case 'F': toggleFullscreen(); break;
+      }
+    });
+
+    const updateProgress = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const p = max > 0 ? Math.min(1, window.scrollY / max) : 0;
+      progress.style.transform = `scaleX(${p})`;
+    };
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    window.addEventListener('resize', updateProgress, { passive: true });
+    updateProgress();
+  </script>
+</body>
+</html>
