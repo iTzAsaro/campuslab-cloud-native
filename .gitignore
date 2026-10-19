@@ -4,7 +4,11 @@ codigo/frontend/dist/
 codigo/frontend/.angular/
 codigo/backend/.gradle/
 codigo/backend/build/
+.gradle/
+build/
+dist/
 *.zip
+*.tar.gz
 
 # System & IDEs
 .idea/
@@ -12,3 +16,7 @@ codigo/backend/build/
 *.log
 .DS_Store
 Thumbs.db
+*.swp
+*.bak
+*~
+
