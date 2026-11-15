@@ -5,9 +5,9 @@ spring:
   application:
     name: campuslab-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:campuslab}}
-    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:campuslab}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:campuslab123}}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:appdb}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:admin}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:adminpassword}}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
