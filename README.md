@@ -131,12 +131,22 @@ docker compose up -d
 
 ### 2. URLs de Acceso y Servicios
 
+#### ☁️ Entorno AWS Cloud (Producción)
+- **Frontend Angular 19 (con SSL/TLS):** [`https://52-200-87-76.sslip.io`](https://52-200-87-76.sslip.io) *(o http://52.200.87.76:4200)*
+- **AWS API Gateway:** [`https://hygoaj1glh.execute-api.us-east-1.amazonaws.com/api`](https://hygoaj1glh.execute-api.us-east-1.amazonaws.com/api)
+- **Kafka-UI Dashboard (Clúster Cloud):** [`http://52.200.87.76:8085`](http://52.200.87.76:8085)
+- **RabbitMQ Management Cloud:** `http://52.200.87.76:15672` (Credenciales: `admin` / `admin`)
+- **Backend API Directa (EC2):** `http://52.200.87.76:8080/api`
+
+#### 💻 Entorno Local (Docker / Dev)
 - **Frontend Angular:** `http://localhost:4200`
 - **Backend API REST:** `http://localhost:8080/api`
-- **Kafka-UI (Gestión de Brokers y Tópicos):** `http://localhost:8085`
+- **Kafka-UI:** `http://localhost:8085`
 - **RabbitMQ Nodo 1 (Management):** `http://localhost:15672` (Credenciales: `admin` / `admin`)
 - **RabbitMQ Nodo 2 (Management):** `http://localhost:15673` (Credenciales: `admin` / `admin`)
 - **PostgreSQL:** `localhost:5433` (Base de datos: `appdb`, Usuario: `admin`)
+
+> 📖 **Ficha Técnica Completa:** Consulta [`Docs/FICHA_TECNICA_Y_ACCESOS_SISTEMA.md`](Docs/FICHA_TECNICA_Y_ACCESOS_SISTEMA.md) para ver la matriz exhaustiva de credenciales, puertos, parámetros de Kafka, configuración IDaaS Entra ID y el cheatsheet de comandos cURL.
 
 ---
 
@@ -164,3 +174,4 @@ npm run build
 
 - **[Plan y Checklist EP5/EP6](PLAN_Y_CHECKLIST_EP5_EP6.md):** Trazabilidad al 100% contra los 9 indicadores de la rúbrica oficial.
 - **[Guía de Defensa y Demostración EP6](Docs/GUIA_DEFENSA_Y_DEMOSTRACION_EP6.md):** Guión para la presentación (5 a 10 min), comandos de prueba en vivo y respuestas a preguntas clave.
+- **[Ficha Técnica y Matriz Maestra de Accesos](Docs/FICHA_TECNICA_Y_ACCESOS_SISTEMA.md):** Matriz completa de IPs, URLs Cloud/Local, puertos, credenciales y cheatsheet cURL.
