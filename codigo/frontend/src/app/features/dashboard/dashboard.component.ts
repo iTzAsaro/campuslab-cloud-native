@@ -120,7 +120,7 @@ type NavigationTab = 'overview' | 'kafka-streaming' | 'kafka-admin' | 'rabbitmq'
             <div class="pill-badge rmq-badge">
               <span class="dot orange-dot"></span> RMQ CLUSTER: 2 NODOS
             </div>
-            <a href="http://localhost:8085" target="_blank" class="btn-link-external">
+            <a [href]="getKafkaUiUrl()" target="_blank" class="btn-link-external">
               KAFKA-UI ↗
             </a>
           </div>
@@ -1308,6 +1308,24 @@ export class DashboardComponent implements OnInit {
       case 'console': return 'CONSOLA DEL SISTEMA // JSON FEED';
       default: return 'PANEL PRINCIPAL';
     }
+  }
+
+  getKafkaUiUrl(): string {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        return 'http://localhost:8085';
+      }
+      if (host.includes('sslip.io')) {
+        const ip = host.replace('.sslip.io', '').replace(/-/g, '.');
+        return `http://${ip}:8085`;
+      }
+      if (host.includes('amazonaws.com')) {
+        return 'http://52.200.87.76:8085';
+      }
+      return `http://${host}:8085`;
+    }
+    return (environment as any).kafkaUiUrl || 'http://localhost:8085';
   }
 
   // =========================================================================
