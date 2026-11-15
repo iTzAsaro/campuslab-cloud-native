@@ -16,3 +16,19 @@ spring:
     listener:
       simple:
         auto-startup: false
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+      missing-topics-fatal: false
+
+campuslab:
+  kafka:
+    topics:
+      bookings-stream: "campuslab.bookings.stream"
+      telemetry-metrics: "campuslab.telemetry.metrics"
+      bookings-dlt: "campuslab.bookings.stream.DLT"
+    consumer-groups:
+      analytics: "campuslab-analytics-group"
+      telemetry: "campuslab-telemetry-group"
+      dlt-audit: "campuslab-dlt-audit-group"

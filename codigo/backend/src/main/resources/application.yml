@@ -18,6 +18,10 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+
+  # =====================================================================
+  # CONFIGURACIÓN RABBITMQ (Mensajería Transaccional & Notificaciones)
+  # =====================================================================
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:${RABBITMQ_HOST:localhost}}
     port: ${SPRING_RABBITMQ_PORT:${RABBITMQ_PORT:5672}}
@@ -26,6 +30,36 @@ spring:
     listener:
       simple:
         acknowledge-mode: manual
+
+  # =====================================================================
+  # CONFIGURACIÓN APACHE KAFKA (Streaming de Eventos & Analítica Continua)
+  # =====================================================================
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      group-id: campuslab-default-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: "com.campuslab.backend.dto.*,com.campuslab.backend.dto.kafka.*"
+        spring.json.use.type.headers: true
+    listener:
+      missing-topics-fatal: false
+
+  # =====================================================================
+  # SEGURIDAD OAUTH2 / IDaaS (Microsoft Entra ID)
+  # =====================================================================
   security:
     oauth2:
       resourceserver:
@@ -33,6 +67,7 @@ spring:
           issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:https://login.microsoftonline.com/4b9ee4c5-a799-40af-88fe-81d4ef8aaba3/v2.0}
 
 campuslab:
+  # RabbitMQ Topología
   rabbitmq:
     exchanges:
       direct: "campuslab.direct"
@@ -49,3 +84,14 @@ campuslab:
       notifications: "routing.notifications"
       reports: "routing.reports.#"
       audit: "routing.audit.#"
+
+  # Kafka Streaming & Analítica Topología
+  kafka:
+    topics:
+      bookings-stream: "campuslab.bookings.stream"
+      telemetry-metrics: "campuslab.telemetry.metrics"
+      bookings-dlt: "campuslab.bookings.stream.DLT"
+    consumer-groups:
+      analytics: "campuslab-analytics-group"
+      telemetry: "campuslab-telemetry-group"
+      dlt-audit: "campuslab-dlt-audit-group"
