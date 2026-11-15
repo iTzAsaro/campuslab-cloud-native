@@ -21,8 +21,17 @@
 
 ## 💻 2. Guión Paso a Paso para la Demostración en Vivo
 
-### Paso 1: Verificación de Contenedores Levantados
-Mostrar al evaluador que el stack completo está arriba en Docker Compose:
+> [!NOTE]
+> La demostración se puede realizar tanto en **Entorno Local** como en **AWS Cloud Producción**:
+> - **Frontend en Producción Cloud (con TLS/SSL):** `https://52-200-87-76.sslip.io` (o Local: `http://localhost:4200`)
+> - **Kafka-UI en la Nube:** `http://52.200.87.76:8085` (o Local: `http://localhost:8085`)
+> - **AWS API Gateway:** `https://hygoaj1glh.execute-api.us-east-1.amazonaws.com/api` (o Local: `http://localhost:8080/api`)
+> - **RabbitMQ Console:** `http://52.200.87.76:15672` (o Local: `http://localhost:15672`)
+
+### Paso 1: Verificación de Contenedores y Servicios
+Mostrar al evaluador que el stack completo está arriba:
+- En Cloud (EC2): Los servicios de streaming (`zookeeper`, `kafka1`, `kafka-ui`, `rabbitmq1`, `rabbitmq2`, `campuslab_frontend`, `campuslab_ssl`) y el microservicio backend nativo en systemd están activos.
+- En Local (Docker Compose):
 ```bash
 cd codigo
 docker compose ps
@@ -30,7 +39,7 @@ docker compose ps
 *Señalar:* Se observan `zookeeper`, `kafka1`, `kafka-ui`, `rabbitmq1`, `rabbitmq2`, `postgres`, `backend` y `frontend`.
 
 ### Paso 2: Apertura de Kafka-UI
-1. Abrir navegador en `http://localhost:8085`.
+1. Abrir navegador en `http://52.200.87.76:8085` (Cloud) o `http://localhost:8085` (Local).
 2. Mostrar los tópicos configurados automáticamente al arrancar Spring Boot:
    - `campuslab.bookings.stream` (3 particiones, factor de replicación 1, retención 7 días).
    - `campuslab.telemetry.metrics` (3 particiones, retención 24 horas).
