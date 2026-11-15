@@ -11,56 +11,37 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * =========================================================================================
- * MOTOR ANALÍTICO Y CAPA DE DOMINIO EN TIEMPO REAL (ANALYTICS PROCESSING SERVICE)
- * =========================================================================================
- * 
- * Implementa la lógica de procesamiento analítico en memoria sobre los flujos de streaming.
- * Mantiene la lógica de negocio desacoplada de la infraestructura física de Kafka y RabbitMQ.
- * 
- * Responsabilidades:
- * 1. Agregación de Métricas: Calcula en tiempo real reservas procesadas, telemetría y alertas DLT.
- * 2. Cálculo de Ocupación por Laboratorio: Suma puestos de trabajo activos en CHECK_IN / CREATED
- *    y los libera en SESSION_COMPLETED / CANCELLED.
- * 3. Detección Temprana de Anomalías: Dispara alertas térmicas si un sensor supera 28.0°C.
- * 4. Auditoría Forense DLT: Almacena los últimos mensajes derivados a la Dead Letter Topic.
- */
+// Servicio de analítica en memoria: procesa eventos de reservas, telemetría y alertas DLT en tiempo real.
 @Service
 public class AnalyticsProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsProcessingService.class);
 
-    // Contadores atómicos thread-safe para analítica de alta concurrencia
+    // Contadores para métricas globales
     private final AtomicLong totalBookingsProcessed = new AtomicLong(0);
     private final AtomicLong totalTelemetryPointsProcessed = new AtomicLong(0);
     private final AtomicLong totalDltAlerts = new AtomicLong(0);
 
-    // Mapas concurrentes para estado de laboratorios en vivo
+    // Estado en memoria de los laboratorios (ocupación, temperatura y potencia)
     private final Map<String, Integer> activeWorkstationsByLab = new ConcurrentHashMap<>();
     private final Map<String, Double> currentTemperatureByLab = new ConcurrentHashMap<>();
     private final Map<String, Double> currentPowerByLab = new ConcurrentHashMap<>();
-    
-    // Listas sincronizadas para feed en vivo de alertas y eventos recientes (máx 20 elementos)
+
+    // Historial de alertas y eventos recientes (máximo 20)
     private final List<Map<String, Object>> recentAlerts = Collections.synchronizedList(new LinkedList<>());
     private final List<BookingStreamEventDto> recentBookingEvents = Collections.synchronizedList(new LinkedList<>());
 
-    /**
-     * Procesa un evento de ciclo de vida de reserva proveniente de Kafka.
-     * Actualiza el contador global, la lista de eventos recientes y el balance de puestos ocupados.
-     */
+    // Procesa eventos de reserva y actualiza la ocupación de los laboratorios
     public void processBookingEvent(BookingStreamEventDto event, int partition, long offset) {
         totalBookingsProcessed.incrementAndGet();
-        log.info("Analytics Engine: Analizando evento de reserva [{}] acción [{}] para lab [{}] (Partición: {}, Offset: {})",
+        log.info("Analytics: Evento de reserva [{}] acción [{}] lab [{}] (p: {}, o: {})",
                 event.getEventId(), event.getAction(), event.getLabId(), partition, offset);
 
-        // Mantener histórico reciente en ventana deslizante (máximo 20 eventos)
         if (recentBookingEvents.size() >= 20) {
             recentBookingEvents.remove(0);
         }
         recentBookingEvents.add(event);
 
-        // Lógica de cálculo de ocupación en tiempo real
         if ("RESERVATION_CREATED".equalsIgnoreCase(event.getAction()) || "CHECK_IN".equalsIgnoreCase(event.getAction())) {
             activeWorkstationsByLab.merge(event.getLabId(), event.getWorkstationCount() != null ? event.getWorkstationCount() : 1, Integer::sum);
         } else if ("RESERVATION_CANCELLED".equalsIgnoreCase(event.getAction()) || "SESSION_COMPLETED".equalsIgnoreCase(event.getAction())) {
@@ -68,14 +49,11 @@ public class AnalyticsProcessingService {
         }
     }
 
-    /**
-     * Procesa métricas de sensores IoT continuas.
-     * Almacena temperatura actual, potencia en Watts y verifica límites térmicos.
-     */
+    // Procesa métricas IoT y genera alerta si la temperatura supera 28°C
     public void processTelemetryMetric(LabTelemetryDto metric, int partition, long offset) {
         totalTelemetryPointsProcessed.incrementAndGet();
-        log.info("Analytics Engine: Procesando telemetría [{}] sensor [{}] temp [{}°C] potencia [{}W] (Partición: {}, Offset: {})",
-                metric.getMetricId(), metric.getSensorId(), metric.getTemperatureCelsius(), metric.getPowerConsumptionWatts(), partition, offset);
+        log.info("Analytics: Telemetría sensor [{}] temp [{}°C] potencia [{}W]",
+                metric.getSensorId(), metric.getTemperatureCelsius(), metric.getPowerConsumptionWatts());
 
         if (metric.getLabCode() != null) {
             currentTemperatureByLab.put(metric.getLabCode(), metric.getTemperatureCelsius());
@@ -84,7 +62,7 @@ public class AnalyticsProcessingService {
                 activeWorkstationsByLab.put(metric.getLabCode(), metric.getActiveWorkstations());
             }
 
-            // Detección de anomalías en streaming (Alerta por sobretemperatura > 28°C)
+            // Alerta si la temperatura supera los 28°C
             if (metric.getTemperatureCelsius() != null && metric.getTemperatureCelsius() > 28.0) {
                 Map<String, Object> alert = new HashMap<>();
                 alert.put("id", UUID.randomUUID().toString());
@@ -99,15 +77,12 @@ public class AnalyticsProcessingService {
                     recentAlerts.remove(0);
                 }
                 recentAlerts.add(alert);
-                log.warn("Analytics Engine [ALERTA TEMPERATURA]: ¡Sobrecalentamiento en lab [{}]! Temp: {}°C",
-                        metric.getLabCode(), metric.getTemperatureCelsius());
+                log.warn("Analytics: Sobrecalentamiento en [{}]! Temp: {}°C", metric.getLabCode(), metric.getTemperatureCelsius());
             }
         }
     }
 
-    /**
-     * Registra un mensaje fallido derivado a la Dead Letter Topic para auditoría forense.
-     */
+    // Registra un mensaje derivado a la Dead Letter Topic (DLT)
     public void recordDltFailure(String topic, int partition, long offset, String payload) {
         totalDltAlerts.incrementAndGet();
         Map<String, Object> dltRecord = new HashMap<>();
@@ -123,21 +98,15 @@ public class AnalyticsProcessingService {
             recentAlerts.remove(0);
         }
         recentAlerts.add(dltRecord);
-        log.warn("Analytics Engine [ALERTA DLT]: Registrado fallo en DLT para tópico [{}] partición [{}] offset [{}]",
-                topic, partition, offset);
+        log.warn("Analytics: Mensaje derivado a DLT de [{}] partición [{}] offset [{}]", topic, partition, offset);
     }
 
-    /**
-     * Entrega un snapshot consolidado de todas las métricas en tiempo real
-     * consumido por el frontend Angular cada 5 segundos.
-     */
+    // Retorna el resumen de métricas para el dashboard y la API
     public Map<String, Object> getAnalyticsSnapshot() {
         return getAnalyticsSummary();
     }
 
-    /**
-     * Resumen de analítica consumido por los controladores y pruebas automatizadas.
-     */
+    // Retorna el resumen actual de métricas
     public Map<String, Object> getAnalyticsSummary() {
         Map<String, Object> snapshot = new HashMap<>();
         snapshot.put("totalBookingsProcessed", totalBookingsProcessed.get());

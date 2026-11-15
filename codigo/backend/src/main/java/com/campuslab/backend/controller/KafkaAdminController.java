@@ -12,20 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
-/**
- * =========================================================================================
- * CONTROLADOR REST: MICROSERVICIO ADMINISTRADOR DE KAFKA (KAFKA ADMIN CONTROLLER)
- * =========================================================================================
- * 
- * Expone la API REST pública para la gestión dinámica del clúster Apache Kafka.
- * 
- * Endpoints Disponibles:
- * - `GET    /api/admin/kafka/topics`                 -> Lista todos los tópicos y sus particiones.
- * - `GET    /api/admin/kafka/topics/{topicName}`     -> Obtiene la configuración detallada de un tópico.
- * - `POST   /api/admin/kafka/topics`                 -> Crea un nuevo tópico en caliente.
- * - `DELETE /api/admin/kafka/topics/{topicName}`     -> Elimina un tópico del clúster.
- * - `GET    /api/admin/kafka/consumer-groups`        -> Consulta estado y miembros de los grupos de consumidores.
- */
+// Controlador REST para administrar tópicos y grupos de consumo en Apache Kafka.
 @RestController
 @RequestMapping("/api/admin/kafka")
 @CrossOrigin(origins = "*")
@@ -37,25 +24,19 @@ public class KafkaAdminController {
         this.kafkaAdminService = kafkaAdminService;
     }
 
-    /**
-     * Lista todos los tópicos activos en el clúster Kafka.
-     */
+    // Listar todos los tópicos del clúster
     @GetMapping("/topics")
     public ResponseEntity<List<TopicInfoDto>> listTopics() {
         return ResponseEntity.ok(kafkaAdminService.listTopics());
     }
 
-    /**
-     * Inspecciona los metadatos de un tópico específico.
-     */
+    // Obtener detalles de un tópico específico
     @GetMapping("/topics/{topicName}")
     public ResponseEntity<TopicInfoDto> getTopicDetails(@PathVariable String topicName) {
         return ResponseEntity.ok(kafkaAdminService.describeTopic(topicName));
     }
 
-    /**
-     * Crea un tópico Kafka programáticamente con particiones y retención personalizadas.
-     */
+    // Crear un nuevo tópico dinámicamente
     @PostMapping("/topics")
     public ResponseEntity<Map<String, Object>> createTopic(@Valid @RequestBody TopicCreateRequestDto request) {
         TopicInfoDto createdTopic = kafkaAdminService.createTopic(request);
@@ -66,9 +47,7 @@ public class KafkaAdminController {
         ));
     }
 
-    /**
-     * Elimina un tópico del clúster.
-     */
+    // Eliminar un tópico del clúster
     @DeleteMapping("/topics/{topicName}")
     public ResponseEntity<Map<String, String>> deleteTopic(@PathVariable String topicName) {
         kafkaAdminService.deleteTopic(topicName);
@@ -78,9 +57,7 @@ public class KafkaAdminController {
         ));
     }
 
-    /**
-     * Consulta el estado operativo y conteo de miembros de los Consumer Groups de Kafka.
-     */
+    // Listar grupos de consumidores y su estado
     @GetMapping("/consumer-groups")
     public ResponseEntity<List<ConsumerGroupInfoDto>> listConsumerGroups() {
         return ResponseEntity.ok(kafkaAdminService.listConsumerGroups());

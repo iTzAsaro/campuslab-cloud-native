@@ -15,23 +15,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * =========================================================================================
- * MICROSERVICIO ADMINISTRADOR DE APACHE KAFKA (KAFKA ADMIN SERVICE)
- * =========================================================================================
- * 
- * Implementa la gestión dinámica y el ciclo de vida del clúster Apache Kafka utilizando
- * el cliente programático nativo `AdminClient`.
- * 
- * Capacidades Principales:
- * 1. Creación Dinámica de Tópicos: Permite definir nombre, particiones, réplicas y políticas
- *    de retención personalizadas desde la API REST o la interfaz web.
- * 2. Listado e Inspección de Metadatos: Obtiene en tiempo real las particiones activas,
- *    líderes de réplica, políticas de limpieza y configuraciones efectivas.
- * 3. Eliminación Segura de Tópicos: Borra tópicos del catálogo del broker y ZooKeeper.
- * 4. Monitoreo de Consumer Groups: Inspecciona grupos de consumidores activos, su estado
- *    de rebalanceo (Stable, CompletingRebalance, Dead) y la cantidad de miembros conectados.
- */
+// Servicio para administrar tópicos y grupos de consumo usando el AdminClient de Kafka.
 @Service
 public class KafkaAdminService {
 
@@ -43,19 +27,12 @@ public class KafkaAdminService {
         this.adminClient = adminClient;
     }
 
-    /**
-     * Crea un nuevo tópico Kafka en caliente sin necesidad de reiniciar la infraestructura.
-     * 
-     * @param request DTO con especificaciones de nombre, número de particiones y retención.
-     * @return TopicInfoDto con el estado del tópico recién materializado en los brokers.
-     */
+    // Crea un nuevo tópico con particiones, réplicas y retención configurables
     public TopicInfoDto createTopic(TopicCreateRequestDto request) {
-        log.info("Kafka Admin [CREAR]: Solicitando creación de tópico [{}] con {} particiones y replicación {}",
-                request.getName(), request.getPartitions(), request.getReplicationFactor());
+        log.info("Kafka Admin: Creando tópico [{}] con {} particiones", request.getName(), request.getPartitions());
 
         NewTopic newTopic = new NewTopic(request.getName(), request.getPartitions(), request.getReplicationFactor());
 
-        // Aplicar configuraciones de retención y limpieza
         Map<String, String> configs = new HashMap<>();
         if (request.getRetentionMs() != null) {
             configs.put(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(request.getRetentionMs()));
@@ -69,21 +46,17 @@ public class KafkaAdminService {
         newTopic.configs(configs);
 
         try {
-            // Invoca la creación y espera confirmación síncrona del clúster (timeout 10s)
             adminClient.createTopics(Collections.singletonList(newTopic)).all().get(10, TimeUnit.SECONDS);
-            log.info("Kafka Admin [CREAR ÉXITO]: Tópico [{}] creado satisfactoriamente", request.getName());
+            log.info("Kafka Admin: Tópico [{}] creado con éxito", request.getName());
             return describeTopic(request.getName());
         } catch (Exception e) {
-            log.error("Kafka Admin [ERROR CREACIÓN]: No se pudo crear el tópico [{}]: {}", request.getName(), e.getMessage());
+            log.error("Kafka Admin: Error al crear tópico [{}]: {}", request.getName(), e.getMessage());
             throw new RuntimeException("Error al crear tópico Kafka: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Lista todos los tópicos registrados en el clúster (excluyendo tópicos internos del sistema como __consumer_offsets).
-     */
+    // Lista los tópicos del clúster (excluyendo tópicos internos del sistema)
     public List<TopicInfoDto> listTopics() {
-        log.info("Kafka Admin [LISTAR]: Consultando catálogo de tópicos del clúster...");
         try {
             ListTopicsResult listTopicsResult = adminClient.listTopics(new ListTopicsOptions().listInternal(false));
             Map<String, TopicListing> topicListingMap = listTopicsResult.namesToListings().get(10, TimeUnit.SECONDS);
@@ -92,7 +65,6 @@ public class KafkaAdminService {
                 return Collections.emptyList();
             }
 
-            // Describir tópicos para obtener el desglose detallado de particiones
             DescribeTopicsResult describeResult = adminClient.describeTopics(topicListingMap.keySet());
             Map<String, TopicDescription> descriptionMap = describeResult.allTopicNames().get(10, TimeUnit.SECONDS);
 
@@ -121,14 +93,12 @@ public class KafkaAdminService {
             result.sort(Comparator.comparing(TopicInfoDto::getName));
             return result;
         } catch (Exception e) {
-            log.error("Kafka Admin [ERROR LISTADO]: Error al consultar tópicos del clúster: {}", e.getMessage());
+            log.error("Kafka Admin: Error al listar tópicos: {}", e.getMessage());
             throw new RuntimeException("Error al listar tópicos de Kafka: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Obtiene la descripción detallada de un tópico específico, incluyendo particiones y configuraciones efectivas.
-     */
+    // Obtiene el detalle de un tópico (particiones, réplicas y configuración)
     public TopicInfoDto describeTopic(String topicName) {
         try {
             DescribeTopicsResult describeResult = adminClient.describeTopics(Collections.singletonList(topicName));
@@ -145,7 +115,6 @@ public class KafkaAdminService {
 
             int replicationFactor = desc.partitions().isEmpty() ? 1 : desc.partitions().get(0).replicas().size();
 
-            // Consultar configuraciones del tópico (retention, cleanup.policy, etc.)
             ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
             DescribeConfigsResult configsResult = adminClient.describeConfigs(Collections.singletonList(resource));
             Config config = configsResult.all().get(10, TimeUnit.SECONDS).get(resource);
@@ -168,34 +137,25 @@ public class KafkaAdminService {
                     configMap
             );
         } catch (Exception e) {
-            log.error("Kafka Admin [ERROR DESCRIBIR]: Error al describir tópico [{}]: {}", topicName, e.getMessage());
+            log.error("Kafka Admin: Error al describir tópico [{}]: {}", topicName, e.getMessage());
             throw new RuntimeException("Error al describir tópico Kafka: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Elimina un tópico del clúster Kafka.
-     * 
-     * @param topicName Nombre del tópico a suprimir.
-     */
+    // Elimina un tópico del clúster
     public void deleteTopic(String topicName) {
-        log.info("Kafka Admin [ELIMINAR]: Solicitando borrado del tópico [{}]", topicName);
+        log.info("Kafka Admin: Eliminando tópico [{}]", topicName);
         try {
             adminClient.deleteTopics(Collections.singletonList(topicName)).all().get(10, TimeUnit.SECONDS);
-            log.info("Kafka Admin [ELIMINAR ÉXITO]: Tópico [{}] eliminado del clúster", topicName);
+            log.info("Kafka Admin: Tópico [{}] eliminado", topicName);
         } catch (Exception e) {
-            log.error("Kafka Admin [ERROR ELIMINACIÓN]: Falló la eliminación del tópico [{}]: {}", topicName, e.getMessage());
+            log.error("Kafka Admin: Error al eliminar tópico [{}]: {}", topicName, e.getMessage());
             throw new RuntimeException("Error al eliminar tópico Kafka: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Consulta el estado de los Consumer Groups activos en el clúster.
-     * Permite verificar la sincronización y membresía de `campuslab-analytics-group`,
-     * `campuslab-telemetry-group` y `campuslab-dlt-audit-group`.
-     */
+    // Lista los grupos de consumidores registrados en el clúster y su estado
     public List<ConsumerGroupInfoDto> listConsumerGroups() {
-        log.info("Kafka Admin [CONSUMER GROUPS]: Consultando grupos registrados en el coordinador...");
         try {
             ListConsumerGroupsResult listResult = adminClient.listConsumerGroups();
             Collection<ConsumerGroupListing> listings = listResult.all().get(10, TimeUnit.SECONDS);
@@ -225,7 +185,7 @@ public class KafkaAdminService {
             result.sort(Comparator.comparing(ConsumerGroupInfoDto::getGroupId));
             return result;
         } catch (Exception e) {
-            log.error("Kafka Admin [ERROR GRUPOS]: No se pudo consultar Consumer Groups: {}", e.getMessage());
+            log.error("Kafka Admin: Error al consultar grupos de consumidores: {}", e.getMessage());
             throw new RuntimeException("Error al consultar consumer groups de Kafka: " + e.getMessage(), e);
         }
     }

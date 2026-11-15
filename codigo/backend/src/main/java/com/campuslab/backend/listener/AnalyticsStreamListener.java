@@ -10,24 +10,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
-/**
- * =========================================================================================
- * CONSUMIDOR KAFKA 1: ANALÍTICA Y CICLO DE VIDA DE RESERVAS (STREAMING)
- * =========================================================================================
- * 
- * Tópico Suscrito: `campuslab.bookings.stream`
- * Consumer Group: `campuslab-analytics-group`
- * 
- * Principios y Arquitectura:
- * 1. Aislamiento de Dominio: Pertenece a un grupo exclusivo (`campuslab-analytics-group`), lo
- *    que garantiza que la velocidad de consumo de este flujo analítico sea totalmente
- *    independiente del procesamiento de telemetría IoT o auditoría DLT.
- * 2. Concurrencia Equilibrada: El contenedor asigna un hilo de escucha a cada partición.
- * 3. Inyección de Fallo Controlado: Si detecta un correo con `trigger-dlt-error`, lanza una
- *    excepción deliberada para demostrar a la comisión los reintentos automáticos
- *    `FixedBackOff` y la posterior derivación al tópico `.DLT`.
- * 4. Desacoplamiento: Delega el cálculo de analítica a `AnalyticsProcessingService`.
- */
+// Consumidor para eventos de reservas desde el tópico campuslab.bookings.stream.
 @Component
 public class AnalyticsStreamListener {
 
@@ -39,13 +22,7 @@ public class AnalyticsStreamListener {
         this.analyticsProcessingService = analyticsProcessingService;
     }
 
-    /**
-     * Punto de entrada para los eventos de reserva provenientes del tópico de streaming.
-     * 
-     * @param event DTO deserializado de forma segura con los datos del evento.
-     * @param partition Partición física (0, 1 o 2) asignada al consumidor.
-     * @param offset Número secuencial único del mensaje dentro de la partición.
-     */
+    // Escucha eventos de reservas; si contiene "trigger-dlt-error" simula un fallo para activar el DLT
     @KafkaListener(
             topics = "${campuslab.kafka.topics.bookings-stream:campuslab.bookings.stream}",
             groupId = "${campuslab.kafka.consumer-groups.analytics:campuslab-analytics-group}",
@@ -54,16 +31,14 @@ public class AnalyticsStreamListener {
     public void onBookingStreamEvent(@Payload BookingStreamEventDto event,
                                      @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
                                      @Header(KafkaHeaders.OFFSET) long offset) {
-        log.info("Kafka Listener [ANALYTICS CONSUMER] | Group: campuslab-analytics-group | Tópico: bookings.stream | Partición: {} | Offset: {} | Evento: {}",
-                partition, offset, event.getEventId());
+        log.info("Kafka Listener: Recibido evento [{}] en partición [{}] offset [{}]",
+                event.getEventId(), partition, offset);
 
-        // Manejo y validación de payload - Simulación deliberada de error irrecuperable para prueba de DLT
         if (event.getStudentEmail() != null && event.getStudentEmail().contains("trigger-dlt-error")) {
-            log.warn("Kafka Listener [ERROR SIMULADO]: Detectado payload con 'trigger-dlt-error'. Lanzando excepción para activar DefaultErrorHandler y DLT...");
-            throw new IllegalArgumentException("Fallo deliberado en procesamiento de reserva: " + event.getEventId());
+            log.warn("Kafka Listener: Simulación de fallo para activar DLT en evento [{}]", event.getEventId());
+            throw new IllegalArgumentException("Fallo deliberado para probar DLT: " + event.getEventId());
         }
 
-        // Delegar procesamiento a la capa de dominio en memoria
         analyticsProcessingService.processBookingEvent(event, partition, offset);
     }
 }
