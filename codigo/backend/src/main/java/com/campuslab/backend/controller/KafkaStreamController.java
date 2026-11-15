@@ -4,15 +4,29 @@ import com.campuslab.backend.dto.kafka.BookingStreamEventDto;
 import com.campuslab.backend.dto.kafka.LabTelemetryDto;
 import com.campuslab.backend.service.AnalyticsProcessingService;
 import com.campuslab.backend.service.KafkaProducerService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * Controlador REST para operaciones de Streaming y Event-Driven Analytics con Kafka.
- * Permite disparar eventos de reservas, métricas de telemetría IoT, simulación masiva y pruebas de DLT.
+ * =========================================================================================
+ * CONTROLADOR REST: INGESTA DE EVENTOS Y MOTOR ANALÍTICO (KAFKA STREAM CONTROLLER)
+ * =========================================================================================
+ * 
+ * Expone los endpoints de ingesta de eventos de streaming, métricas de telemetría IoT,
+ * simulación de ráfagas balanceadas, pruebas deliberadas de resiliencia DLT y consulta de analítica.
+ * 
+ * Endpoints:
+ * - `POST /api/stream/kafka/bookings`           -> Publica un evento de ciclo de vida de reserva.
+ * - `POST /api/stream/kafka/telemetry`          -> Transmite una métrica de telemetría de sensor.
+ * - `POST /api/stream/kafka/simulate-load`      -> Dispara una ráfaga de 10 eventos distribuidos por partición.
+ * - `POST /api/stream/kafka/trigger-dlt-error`  -> Inyecta un mensaje corrupto para forzar reintentos y DLT.
+ * - `GET  /api/stream/kafka/analytics`          -> Retorna las métricas agregadas en tiempo real.
  */
 @RestController
 @RequestMapping("/api/stream/kafka")
@@ -29,21 +43,15 @@ public class KafkaStreamController {
     }
 
     /**
-     * Publica un evento de streaming de reserva en Kafka.
+     * Publica un evento de streaming de reserva en `campuslab.bookings.stream` particionado por labId.
      */
     @PostMapping("/bookings")
-    public ResponseEntity<Map<String, Object>> publishBookingEvent(@RequestBody(required = false) BookingStreamEventDto request) {
-        BookingStreamEventDto event = request;
-        if (event == null || event.getEventId() == null) {
-            event = new BookingStreamEventDto(
-                    "EVT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
-                    1001L,
-                    "LAB-CLOUD-01",
-                    "estudiante@campuslab.cl",
-                    "RESERVATION_CREATED",
-                    120,
-                    1
-            );
+    public ResponseEntity<Map<String, Object>> publishBookingEvent(@Valid @RequestBody BookingStreamEventDto event) {
+        if (event.getEventId() == null) {
+            event.setEventId("EVT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        }
+        if (event.getTimestamp() == null) {
+            event.setTimestamp(Instant.now());
         }
 
         kafkaProducerService.publishBookingStreamEvent(event);
@@ -57,42 +65,36 @@ public class KafkaStreamController {
     }
 
     /**
-     * Publica una métrica de telemetría IoT de laboratorio.
+     * Transmite una lectura de telemetría IoT de sensores hacia `campuslab.telemetry.metrics`.
      */
     @PostMapping("/telemetry")
-    public ResponseEntity<Map<String, Object>> publishTelemetry(@RequestBody(required = false) LabTelemetryDto request) {
-        LabTelemetryDto metric = request;
-        if (metric == null || metric.getMetricId() == null) {
-            metric = new LabTelemetryDto(
-                    "TEL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
-                    "LAB-CLOUD-01",
-                    "TEMP-POWER-SENSOR-01",
-                    12,
-                    23.5,
-                    45.0,
-                    1850.0
-            );
+    public ResponseEntity<Map<String, Object>> publishTelemetry(@Valid @RequestBody LabTelemetryDto telemetry) {
+        if (telemetry.getMetricId() == null) {
+            telemetry.setMetricId("TEL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        }
+        if (telemetry.getTimestamp() == null) {
+            telemetry.setTimestamp(Instant.now());
         }
 
-        kafkaProducerService.publishTelemetryMetric(metric);
+        kafkaProducerService.publishTelemetryMetric(telemetry);
 
         return ResponseEntity.ok(Map.of(
                 "status", "QUEUED_TO_KAFKA",
                 "topic", "campuslab.telemetry.metrics",
-                "partitionKey", metric.getLabCode(),
-                "metric", metric
+                "partitionKey", telemetry.getLabCode(),
+                "metric", telemetry
         ));
     }
 
     /**
-     * Simula una ráfaga de 10 eventos distribuidos entre 3 laboratorios para probar particionado y balanceo.
+     * Dispara una ráfaga concurrente de 10 eventos distribuidos uniformemente
+     * entre las 3 particiones para demostrar balanceo y particionado en Kafka-UI.
      */
     @PostMapping("/simulate-load")
     public ResponseEntity<Map<String, Object>> simulateLoad() {
         String[] labs = {"LAB-CLOUD-01", "LAB-CLOUD-02", "LAB-REDES-01"};
         String[] actions = {"RESERVATION_CREATED", "CHECK_IN", "SESSION_COMPLETED"};
-
-        List<BookingStreamEventDto> published = new ArrayList<>();
+        java.util.List<BookingStreamEventDto> published = new java.util.ArrayList<>();
 
         for (int i = 1; i <= 10; i++) {
             String lab = labs[i % labs.length];
@@ -119,7 +121,9 @@ public class KafkaStreamController {
     }
 
     /**
-     * Dispara un evento diseñado intencionalmente para fallar en el listener y ser derivado a Dead Letter Topic.
+     * Inyecta intencionalmente un payload con 'trigger-dlt-error' para activar la prueba de resiliencia:
+     * El listener fallará, ejecutará 2 reintentos via FixedBackOff(1000L, 2) y derivará el mensaje
+     * al tópico Dead Letter Topic (`campuslab.bookings.stream.DLT`).
      */
     @PostMapping("/trigger-dlt-error")
     public ResponseEntity<Map<String, Object>> triggerDltError() {
@@ -127,7 +131,7 @@ public class KafkaStreamController {
                 "POISON-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 9999L,
                 "LAB-ERROR-TEST",
-                "trigger-dlt-error@campuslab.cl", // Activa excepción en listener
+                "trigger-dlt-error@campuslab.cl",
                 "CORRUPT_TRANSACTION",
                 0,
                 0
@@ -137,13 +141,13 @@ public class KafkaStreamController {
 
         return ResponseEntity.ok(Map.of(
                 "status", "POISON_PILL_PUBLISHED",
-                "expectedBehavior", "El listener fallará, ejecutará 2 reintentos via FixedBackOff y lo desviará a campuslab.bookings.stream.DLT",
-                "event", poisonPill
+                "event", poisonPill,
+                "expectedBehavior", "El listener fallará, ejecutará 2 reintentos via FixedBackOff y lo desviará a campuslab.bookings.stream.DLT"
         ));
     }
 
     /**
-     * Consulta el estado y métricas de analítica agregadas en streaming por los consumidores Kafka.
+     * Retorna el snapshot consolidado de métricas en tiempo real agregadas por el motor analítico.
      */
     @GetMapping("/analytics")
     public ResponseEntity<Map<String, Object>> getAnalytics() {

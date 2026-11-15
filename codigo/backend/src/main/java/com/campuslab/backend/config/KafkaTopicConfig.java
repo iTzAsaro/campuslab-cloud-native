@@ -13,9 +13,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Configuración y declaración programática de Tópicos Kafka de la plataforma CampusLab.
- * Satisface los indicadores de pauta sobre declaración de 2 tópicos, parámetros de administración
- * (retention.ms, cleanup.policy, número de particiones y factor de replicación).
+ * =========================================================================================
+ * DECLARACIÓN PROGRAMÁTICA Y TOPOLOGÍA DE TÓPICOS KAFKA (KAFKA TOPIC CONFIG)
+ * =========================================================================================
+ * 
+ * Declara e inicializa automáticamente los tópicos especializados del sistema CampusLab
+ * durante el arranque de Spring Boot mediante Spring KafkaAdmin.
+ * 
+ * Cumple con los requerimientos de la Pauta Oficial EP5:
+ * 1. Tópico 1 (Reservas): `campuslab.bookings.stream` con 3 particiones y retención de 7 días.
+ * 2. Tópico 2 (Telemetría IoT): `campuslab.telemetry.metrics` con 3 particiones y retención de 24 horas.
+ * 3. Tópico DLT (Dead Letter Topic): `campuslab.bookings.stream.DLT` con 3 particiones y retención de 14 días.
  */
 @Configuration
 public class KafkaTopicConfig {
@@ -32,6 +40,10 @@ public class KafkaTopicConfig {
     @Value("${campuslab.kafka.topics.bookings-dlt:campuslab.bookings.stream.DLT}")
     private String bookingsDltTopicName;
 
+    /**
+     * Administrador de infraestructura Spring Kafka que aplica las definiciones de NewTopic
+     * contra el clúster al inicializar el contexto de la aplicación.
+     */
     @Bean
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();
@@ -41,49 +53,59 @@ public class KafkaTopicConfig {
 
     /**
      * TÓPICO 1: Streaming de eventos del ciclo de vida de reservas de laboratorios.
-     * Particiones: 3 (balanceo de carga por labId).
-     * Replicación: 1 (entorno clúster broker individual / escalable).
-     * Retención: 7 días (604,800,000 ms) para relectura y análisis histórico.
-     * Cleanup: delete.
+     * 
+     * Especificaciones de Diseño:
+     * - Particiones: 3 (Permite paralelismo y balanceo horizontal por labId).
+     * - Replicación: 1 (Configurado para broker individual en Docker / adaptable a clúster multi-broker).
+     * - Retención (retention.ms): 7 días (604,800,000 ms) para posibilitar relectura histórica de eventos.
+     * - Política de Limpieza (cleanup.policy): delete (Elimina segmentos tras expirar la ventana de retención).
      */
     @Bean
     public NewTopic bookingsStreamTopic() {
         return TopicBuilder.name(bookingsStreamTopicName)
                 .partitions(3)
                 .replicas(1)
-                .config(TopicConfig.RETENTION_MS_CONFIG, "604800000") // 7 días
+                .config(TopicConfig.RETENTION_MS_CONFIG, "604800000") // 7 días en milisegundos
                 .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE)
                 .config(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "1")
                 .build();
     }
 
     /**
-     * TÓPICO 2: Métricas de telemetría y sensores IoT de alta velocidad.
-     * Particiones: 3 (balanceo por código de laboratorio).
-     * Replicación: 1.
-     * Retención: 24 horas (86,400,000 ms) - streaming de métricas operativas.
-     * Cleanup: delete.
+     * TÓPICO 2: Métricas continuas de sensores IoT de laboratorios (temperatura, potencia, ocupación).
+     * 
+     * Especificaciones de Diseño:
+     * - Particiones: 3 (Particionado por código de laboratorio labCode).
+     * - Replicación: 1.
+     * - Retención (retention.ms): 24 horas (86,400,000 ms), optimizado para datos volátiles de alta frecuencia.
+     * - Política de Limpieza (cleanup.policy): delete.
      */
     @Bean
     public NewTopic telemetryMetricsTopic() {
         return TopicBuilder.name(telemetryMetricsTopicName)
                 .partitions(3)
                 .replicas(1)
-                .config(TopicConfig.RETENTION_MS_CONFIG, "86400000") // 24 horas
+                .config(TopicConfig.RETENTION_MS_CONFIG, "86400000") // 24 horas en milisegundos
                 .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE)
+                .config(TopicConfig.MIN_IN_SYNC_REPLICAS_CONFIG, "1")
                 .build();
     }
 
     /**
-     * TÓPICO DLT: Dead Letter Topic para eventos corruptos o no procesables de reservas.
-     * Retención: 14 días para inspección y auditoría post-mortem.
+     * TÓPICO 3: Dead Letter Topic (DLT) para auditoría de eventos de reservas no recuperables.
+     * 
+     * Especificaciones de Diseño:
+     * - Particiones: 3.
+     * - Replicación: 1.
+     * - Retención (retention.ms): 14 días (1,209,600,000 ms) para garantizar amplio margen de análisis forense.
+     * - Política de Limpieza (cleanup.policy): delete.
      */
     @Bean
     public NewTopic bookingsDltTopic() {
         return TopicBuilder.name(bookingsDltTopicName)
                 .partitions(3)
                 .replicas(1)
-                .config(TopicConfig.RETENTION_MS_CONFIG, "1209600000") // 14 días
+                .config(TopicConfig.RETENTION_MS_CONFIG, "1209600000") // 14 días en milisegundos
                 .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE)
                 .build();
     }
