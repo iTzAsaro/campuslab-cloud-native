@@ -19,8 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @SpringBootTest
 @EmbeddedKafka(
         partitions = 3,
-        topics = {"campuslab.bookings.stream", "campuslab.telemetry.metrics", "campuslab.bookings.stream.DLT"},
-        brokerProperties = {"listeners=PLAINTEXT://localhost:9092", "port=9092"}
+        topics = {"campuslab.bookings.stream", "campuslab.telemetry.metrics", "campuslab.bookings.stream.DLT"}
 )
 @ActiveProfiles("test")
 @DirtiesContext

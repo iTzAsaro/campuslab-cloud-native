@@ -17,7 +17,7 @@ spring:
       simple:
         auto-startup: false
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
     listener:
       auto-startup: false
       missing-topics-fatal: false
